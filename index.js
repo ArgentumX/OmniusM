@@ -2,6 +2,7 @@ const mineflayer = require('mineflayer')
 const mineflayerViewer = require('prismarine-viewer').mineflayer
 const { pathfinder, Movements, goals: { GoalNear } } = require('mineflayer-pathfinder')
 const { Vec3 } = require('vec3');
+const repl = require('repl')
 
 class MyBot {
     constructor(options, n) {
@@ -86,7 +87,11 @@ class MyBot {
                 }
             }
         }
-        let maxIndex = arr.indexOf(Math.max.apply(null, arr))
+        let max = Math.max.apply(null, arr)
+        if (max === 0){
+            return
+        }
+        let maxIndex = arr.indexOf(max)
         let targetX = Math.floor(myBot.bot.entity.position.x)
         let targetY = Math.floor(myBot.bot.entity.position.y)
         let targetZ = Math.floor(myBot.bot.entity.position.z)
@@ -105,11 +110,20 @@ class MyBot {
                 break;
         }
         this.goTo(myBot, targetX, targetY, targetZ)
+    }
 
+    mutate(self, chance, range){
+        for (let i = 0; i < self.n; i++){
+            for (let j = 0; j < self.n; j++){
+                if (Math.random() < chance){
+                    let sgn = Math.random() <= 0.5 ? 1 : -1;
+                    self.brain[i][j] += Math.round(Math.random() * sgn * range);
+                }
+            }
+        }
     }
 
     goTo(myBot, x, y, z){
-        console.log("goto")
         const defaultMove = new Movements(myBot.bot)
         bot1.bot.pathfinder.setMovements(defaultMove)
         myBot.bot.pathfinder.setGoal(new GoalNear(x, y, z, 0.2))
@@ -120,27 +134,6 @@ function isInNeuronZone(x1, x2, z1, z2, y1, y2, n){
     return (Math.floor(y1) === Math.floor(y2)) && (Math.max(Math.abs(Math.floor(x2) - Math.floor(x1)), Math.abs(Math.floor(z2)-Math.floor(z1))) <= Math.floor(n / 2))
 }
 
-// i, j - neuron index
-function getBotDirection(i, j, n){
-    if (i - j <= 0){ // up
-        if (n - i + 1 <= j) {
-            return 0
-       }
-       else {
-            return 1
-       }
-    }
-    else {
-        if (n - i + 1 <= j) {
-            return 4
-       }
-       else {
-            return 3
-       }
-    }
-}
-
-
 const options1 = {
     host: '5.42.211.9',
     port: '25565',
@@ -148,6 +141,16 @@ const options1 = {
 }
 var bot1 = new MyBot(options1, 11)
 bot1.bot.once('spawn', () => {
+
+    const r = repl.start('$ ')
+    r.ignoreUndefined = true
+    r.context.bot = bot1
+    r.context.mutate = bot1.mutate
+
+    r.on('exit', () => {
+        bot1.bot.end()
+      })
+
     mineflayerViewer(bot1.bot, { port: 1701, firstPerson: false })
     bot1.printBrain()
     bot1.bot.loadPlugin(pathfinder);
