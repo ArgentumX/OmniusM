@@ -2,7 +2,9 @@ const mineflayer = require('mineflayer')
 const mineflayerViewer = require('prismarine-viewer').mineflayer
 const { pathfinder, Movements, goals: { GoalNear } } = require('mineflayer-pathfinder')
 const { Vec3 } = require('vec3');
-const repl = require('repl')
+const repl = require('repl');
+const { SlowBuffer } = require('buffer');
+const { captureRejectionSymbol } = require('events');
 
 class MyBot {
     constructor(options, n) {
@@ -12,6 +14,7 @@ class MyBot {
         this.n = n
         this.timer = 0
         this.fillBrain(n)
+        this.itemsCollected = 0
         //this.bot.on('physicTick', this.lookAtNearestPlayer())
     }
     
@@ -82,7 +85,6 @@ class MyBot {
         for (let i = 0; i < myBot.n; i++){
             for (let j = 0; j < myBot.n; j++){
                 if (itemsPositioning[i][j] !== 0 ){
-                    console.log(itemsPositioning[i][j])
                     arr = arr.map((num, index) => num + this.brain[i][j][index])
                 }
             }
@@ -125,7 +127,7 @@ class MyBot {
 
     goTo(myBot, x, y, z){
         const defaultMove = new Movements(myBot.bot)
-        bot1.bot.pathfinder.setMovements(defaultMove)
+        myBot.bot.pathfinder.setMovements(defaultMove)
         myBot.bot.pathfinder.setGoal(new GoalNear(x, y, z, 0.2))
     }
 }
@@ -134,26 +136,88 @@ function isInNeuronZone(x1, x2, z1, z2, y1, y2, n){
     return (Math.floor(y1) === Math.floor(y2)) && (Math.max(Math.abs(Math.floor(x2) - Math.floor(x1)), Math.abs(Math.floor(z2)-Math.floor(z1))) <= Math.floor(n / 2))
 }
 
-const options1 = {
-    host: '5.42.211.9',
-    port: '25565',
-    username: 'Biba',
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
-var bot1 = new MyBot(options1, 11)
-bot1.bot.once('spawn', () => {
 
-    const r = repl.start('$ ')
-    r.ignoreUndefined = true
-    r.context.bot = bot1
-    r.context.mutate = bot1.mutate
+function createOmniBot(name){
+    var options = {
+        host: '5.42.211.9',
+        port: '25565',
+        username: name,
+    }
+    let omniBot = new MyBot(options, 11)
+    omniBot.bot.once('spawn', () => {
+        omniBot.bot.loadPlugin(pathfinder);
+        omniBot.bot.on('physicsTick', () => omniBot.chooseDirection(omniBot))
+    })
+    omniBot.bot.on('playerCollect', (collector, collected) => {
+        if(collector.type === 'player' && collected.type === 'object' && collector.username == bot.name) {
+            console.log("wtf")
+            omniBot.itemsCollected += 1
+        }
+    });
+    return omniBot
+}
 
-    r.on('exit', () => {
-        bot1.bot.end()
-      })
 
-    mineflayerViewer(bot1.bot, { port: 1701, firstPerson: false })
-    bot1.printBrain()
-    bot1.bot.loadPlugin(pathfinder);
-    bot1.bot.on('physicsTick', () => bot1.chooseDirection(bot1))
-})
+async function startSimulation(botNumber){
+    for (let i = 0; i < botNumber; i++){
+        let omniBot = createOmniBot("Omnibot"+i)
+        botList.push(omniBot)
+        await sleep(5000)
+    }
+    simulationLoop()
+}
+
+async function simulationLoop(){
+    
+
+    let i = 0
+    while (true){
+        console.log("Starting new simulation cycle " + i)
+        await sleep(10000)
+        botList = botList.sort((a, b) => {
+            if (a.itemsCollected < b.itemsCollected){
+                return 1
+            }
+            else if (a.itemsCollected > b.itemsCollected){
+                return -1
+            }
+            return 0
+        })
+
+        let s = ''
+        for (let j = 0; j < BOT_NUMBER; j++){
+            s += botList[j].name + ":" + botList[j].itemsCollected + ', ';
+        }
+        console.log(s)
+        i += 1
+    }
+}
+
+var botList = []
+const BOT_NUMBER = 3
+const r = repl.start('$ ')
+r.ignoreUndefined = true
+r.context.blist = botList
+
+startSimulation(BOT_NUMBER);
+
+
+//bot1.bot.once('spawn', () => {
+    //const r = repl.start('$ ')
+    //r.ignoreUndefined = true
+    //r.context.bot = bot1
+    //r.context.mutate = bot1.mutate
+
+    //r.on('exit', () => {
+        //bot1.bot.end()
+      //})
+
+    //mineflayerViewer(bot1.bot, { port: 1701, firstPerson: false })
+    //bot1.printBrain()
+    //bot1.bot.loadPlugin(pathfinder);
+    //bot1.bot.on('physicsTick', () => bot1.chooseDirection(bot1))
+//})
 // bot1.bot.on('itemDrop', () => console.log(bot1.getItemsPositioning(bot1)))
