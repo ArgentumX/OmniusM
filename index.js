@@ -33,10 +33,11 @@ class MyBot {
     fillBrainWithRandom(brain, n) {
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
-                brain[i][j][0] = Math.random() < 0.7 ? 0 : 1
-                brain[i][j][1] = Math.random() < 0.7 ? 0 : 1
-                brain[i][j][2] = Math.random() < 0.7 ? 0 : 1
-                brain[i][j][3] = Math.random() < 0.7 ? 0 : 1
+                
+                brain[i][j][0] = Math.random() < 0.7 ? 0 : 1 * (Math.random() < 0.5 ? -1 : 1)
+                brain[i][j][1] = Math.random() < 0.7 ? 0 : 1 * (Math.random() < 0.5 ? -1 : 1)
+                brain[i][j][2] = Math.random() < 0.7 ? 0 : 1 * (Math.random() < 0.5 ? -1 : 1)
+                brain[i][j][3] = Math.random() < 0.7 ? 0 : 1 * (Math.random() < 0.5 ? -1 : 1)
             }
         }
     }
@@ -73,9 +74,9 @@ class MyBot {
     }
 
     chooseDirection(myBot){
-        if (myBot.timer < 2){
+        if (myBot.timer < 20){
             myBot.timer++
-            return
+            return;
         }
         myBot.timer = 0
 
@@ -85,10 +86,11 @@ class MyBot {
         for (let i = 0; i < myBot.n; i++){
             for (let j = 0; j < myBot.n; j++){
                 if (itemsPositioning[i][j] !== 0 ){
-                    arr = arr.map((num, index) => num + this.brain[i][j][index])
+                    arr = arr.map((num, index) => num + myBot.brain[i][j][index])
                 }
             }
         }
+        console.log()
         let max = Math.max.apply(null, arr)
         if (max === 0){
             return
@@ -119,7 +121,7 @@ class MyBot {
             for (let j = 0; j < self.n; j++){
                 if (Math.random() < chance){
                     let sgn = Math.random() <= 0.5 ? 1 : -1;
-                    self.brain[i][j] += Math.round(Math.random() * sgn * range);
+                    self.brain[i][j] = self.brain[i][j].map((num, index) => num + Math.round(Math.random() * sgn * range));
                 }
             }
         }
@@ -140,32 +142,38 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function createOmniBot(name){
+
+
+async function createOmniBot(name){
     var options = {
         host: '5.42.211.9',
         port: '25565',
         username: name,
     }
-    let omniBot = new MyBot(options, 11)
+    var omniBot = new MyBot(options, 11)
     omniBot.bot.once('spawn', () => {
         omniBot.bot.loadPlugin(pathfinder);
         omniBot.bot.on('physicsTick', () => omniBot.chooseDirection(omniBot))
     })
     omniBot.bot.on('playerCollect', (collector, collected) => {
-        if(collector.type === 'player' && collected.type === 'object' && collector.username == bot.name) {
-            console.log("wtf")
+        if(collector.type === 'player' && collector.username === omniBot.name) {
             omniBot.itemsCollected += 1
         }
     });
+
+    omniBot.bot.on('error', () => {
+        sleep(5000)
+        createOmniBot(name)
+    })
     return omniBot
 }
 
 
 async function startSimulation(botNumber){
     for (let i = 0; i < botNumber; i++){
-        let omniBot = createOmniBot("Omnibot"+i)
+        var omniBot = await createOmniBot("Omnibot"+i)
         botList.push(omniBot)
-        await sleep(5000)
+        await sleep(8000)
     }
     simulationLoop()
 }
@@ -175,8 +183,8 @@ async function simulationLoop(){
 
     let i = 0
     while (true){
-        console.log("Starting new simulation cycle " + i)
-        await sleep(10000)
+        console.log("Starting simulation cycle " + i)
+        await sleep(25000)
         botList = botList.sort((a, b) => {
             if (a.itemsCollected < b.itemsCollected){
                 return 1
@@ -187,17 +195,33 @@ async function simulationLoop(){
             return 0
         })
 
-        let s = ''
-        for (let j = 0; j < BOT_NUMBER; j++){
-            s += botList[j].name + ":" + botList[j].itemsCollected + ', ';
+
+        console.log("best result is ", botList[0].itemsCollected);
+        if (botList[0].itemsCollected <= 2){
+            for (let j = 0; j < BOT_NUMBER; j++){
+                if (j >= Math.ceil(BOT_NUMBER / 2)) {
+                    botList[j].fillBrain(botList[j].n);
+                }
+            }
         }
-        console.log(s)
+        else {
+            for (let j = 0; j < BOT_NUMBER; j++){
+                botList[j].itemsCollected = 0;
+                if (j > Math.ceil(BOT_NUMBER / 2)) {
+                    botList[j].brain = Array.from(botList[BOT_NUMBER-j-1].brain)
+                    botList[j].mutate(botList[j], 0.2, 1)
+                }
+                else if (j === Math.ceil(BOT_NUMBER / 2)){
+                    botList[j].fillBrain(botList[j].n);
+                }
+            }
+        }
         i += 1
     }
 }
 
 var botList = []
-const BOT_NUMBER = 3
+const BOT_NUMBER = 10
 const r = repl.start('$ ')
 r.ignoreUndefined = true
 r.context.blist = botList
